@@ -1,0 +1,24 @@
+{
+  "name": "moviedock-backend",
+  "version": "1.0.0",
+  "description": "MovieDock Backend API",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "start:dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "commitizen": "^4.3.2",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.20.5",
+    "typescript": "^7.0.2"
+  }
+}
