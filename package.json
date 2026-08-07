@@ -4,20 +4,28 @@
   "description": "MovieDock Backend API",
   "type": "module",
   "main": "dist/server.js",
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
   "scripts": {
     "start:dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "commitizen": "^4.3.2",
+    "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.1",
-    "commitizen": "^4.3.2",
-    "nodemon": "^3.1.14",
+    "cz-conventional-changelog": "^3.3.0",
     "tsx": "^4.20.5",
     "typescript": "^7.0.2"
   }
