@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+
+    # Jellyfin web UI
+    ports:
+      - "8096:8096"
+
+    environment:
+      - TZ=Asia/Dhaka
+
+    volumes:
+      # Jellyfin app data
+      - jellyfin_config:/config
+      - jellyfin_cache:/cache
+
+      # Media libraries (Windows host paths)
+      - E:/Movies:/media/movies:ro
+      - E:/tv-shows:/media/tv-shows:ro
+      - E:/anime:/media/anime:ro
+
+    # Optional: improves transcoding permissions on some hosts
+    # user: "1000:1000"
+
+    # Optional hardware acceleration (uncomment if needed)
+    # devices:
+    #   - /dev/dri:/dev/dri
+
+volumes:
+  jellyfin_config:
+  jellyfin_cache:

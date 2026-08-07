@@ -11,7 +11,7 @@ for (const candidate of envCandidates) {
   }
 }
 
-const jellyfinUrl = process.env.JELLYFIN_URL ?? "http://127.0.0.1:8096";
+const jellyfinUrl = process.env.JELLYFIN_URL ?? "http://192.168.1.100:8096";
 
 export const env = {
   port: Number(process.env.PORT ?? 5000),
