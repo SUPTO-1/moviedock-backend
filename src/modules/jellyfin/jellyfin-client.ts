@@ -808,6 +808,7 @@ export function buildJellyfinPlaybackUrl(
   return url.toString();
 }
 
+
 export async function searchJellyfinItems(query: string, limit = 30) {
   const trimmed = query.trim();
   if (!trimmed) return [];
