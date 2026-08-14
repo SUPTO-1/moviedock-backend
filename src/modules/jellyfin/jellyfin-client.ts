@@ -210,31 +210,6 @@ function createOfflineMediaItem(id: string): MediaCatalogItem {
 function logMediaSummary(label: string, item: JellyfinBaseItem) {
   const cast = item.People?.slice(0, 8).map((person) => ({ name: person.Name ?? "Unknown", role: person.Role ?? undefined, type: person.Type ?? undefined })) ?? [];
   const studioNames = item.Studios?.map((studio) => studio.Name).filter((name): name is string => Boolean(name)) ?? [];
-
-  console.info(
-    `[Jellyfin] ${label}:`,
-    JSON.stringify(
-      {
-        id: item.Id,
-        name: item.Name,
-        type: item.Type,
-        year: item.ProductionYear,
-        genres: item.Genres ?? [],
-        rating: item.OfficialRating ?? "NR",
-        communityRating: item.CommunityRating ?? null,
-        status: item.Status ?? null,
-        seriesName: item.SeriesName ?? null,
-        seasonName: item.SeasonName ?? null,
-        indexNumber: item.IndexNumber ?? null,
-        parentIndexNumber: item.ParentIndexNumber ?? null,
-        mediaSources: item.MediaSources?.length ?? 0,
-        cast,
-        studios: studioNames,
-      },
-      null,
-      2,
-    ),
-  );
 }
 
 function createOfflineImage(kind: "primary" | "backdrop") {
@@ -410,10 +385,7 @@ async function fetchAnimeLibraryIds(): Promise<Set<string>> {
 
   const ids = new Set(
     response.Items.filter((folder) => isAnimeLibraryName(folder.Name)).map((folder) => folder.ItemId),
-  );
-
-  console.info(`[Jellyfin] Anime library ids: ${[...ids].join(", ") || "(none)"}`);
-  return ids;
+  );  return ids;
 }
 
 async function getAnimeLibraryIds(): Promise<Set<string>> {
@@ -620,20 +592,6 @@ export async function getJellyfinItems(limit = 20, collectionType: JellyfinColle
     ]);
 
     const items = response.Items.map((item) => mapToCatalogItem(item, mapItemType(item, animeLibraryIds)));
-
-    console.info(
-      `[Jellyfin] Items (${collectionType}, ${items.length}/${response.TotalRecordCount ?? items.length}):`,
-      items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        type: item.type,
-        year: item.year,
-        genres: item.genres,
-        mediaSources: item.mediaSourceCount ?? 0,
-        progress: item.progress ?? null,
-        status: item.status ?? null,
-      })),
-    );
 
     if (collectionType === "movie") {
       // "movie" tab includes both regular movies AND anime movies.

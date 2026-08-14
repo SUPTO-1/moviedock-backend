@@ -96,9 +96,6 @@ jellyfinRouter.get("/play/:id", async (req, res, next) => {
       subtitleStreamIndex: Number.isFinite(subtitle) ? subtitle : undefined,
       mediaSourceId,
     });
-    console.info(
-      `[Jellyfin] Play redirect: ${req.params.id} -> ${playbackId} (audio=${Number.isFinite(audio) ? audio : "default"}, subtitle=${Number.isFinite(subtitle) ? subtitle : "off"}, mediaSource=${mediaSourceId ?? "n/a"})`,
-    );
     res.redirect(playbackUrl);
   } catch (error) {
     next(error);

@@ -15,6 +15,7 @@ export const createApp = () => {
     res.send("movie dock is running");
   });
   app.get("/api/health", (_req, res) => {
+    console.info("[Health] Ping received");
     res.json({ ok: true });
   });
 
