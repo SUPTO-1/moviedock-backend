@@ -16,6 +16,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/busboy": "^1.5.4",
+    "busboy": "^1.6.0",
     "commitizen": "^4.3.2",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",

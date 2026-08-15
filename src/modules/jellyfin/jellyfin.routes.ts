@@ -1,6 +1,7 @@
 import { Router } from "express";
+import { Readable } from "node:stream";
 import {
-  buildJellyfinPlaybackUrl,
+  fetchJellyfinStream,
   getJellyfinHealth,
   getJellyfinImage,
   getJellyfinItemById,
@@ -32,7 +33,7 @@ jellyfinRouter.get("/items", async (req, res, next) => {
     const type = typeof req.query.type === "string" ? req.query.type : "all";
     const items = await getJellyfinItems(
       Number.isFinite(limit) ? limit : 20,
-      type === "movie" || type === "series" || type === "anime" ? type : "all",
+      type === "movie" || type === "series" || type === "anime" || type === "photo" ? type : "all",
     );
     res.json({ items });
   } catch (error) {
@@ -78,8 +79,10 @@ jellyfinRouter.get("/play/:id", async (req, res, next) => {
   try {
     const { itemId: playbackId, mediaSourceId: resolvedMediaSourceId } =
       await resolveJellyfinPlaybackSource(req.params.id);
-    // Always use the direct .mp4 stream URL so the player can seek freely
-    // instead of being limited to chunked HLS segments.
+    // Proxy the stream same-origin so mobile/TV browsers can issue Range
+    // requests for seeking. Previously this was a cross-origin res.redirect
+    // to Jellyfin, which desktop Chrome tolerated but mobile/TV did not —
+    // Range headers got dropped and the player threw MEDIA_ELEMENT_ERROR.
     const audio = Number(req.query.audio);
     const subtitle = Number(req.query.subtitle);
     // Prefer a mediaSourceId supplied by the client (the player knows the
@@ -91,15 +94,54 @@ jellyfinRouter.get("/play/:id", async (req, res, next) => {
       typeof req.query.mediaSourceId === "string" && req.query.mediaSourceId
         ? req.query.mediaSourceId
         : resolvedMediaSourceId;
-    const playbackUrl = buildJellyfinPlaybackUrl(playbackId, {
-      audioStreamIndex: Number.isFinite(audio) ? audio : undefined,
-      subtitleStreamIndex: Number.isFinite(subtitle) ? subtitle : undefined,
-      mediaSourceId,
-    });
-    console.info(
-      `[Jellyfin] Play redirect: ${req.params.id} -> ${playbackId} (audio=${Number.isFinite(audio) ? audio : "default"}, subtitle=${Number.isFinite(subtitle) ? subtitle : "off"}, mediaSource=${mediaSourceId ?? "n/a"})`,
+
+    const rangeHeader = req.headers.range;
+    const upstream = await fetchJellyfinStream(
+      playbackId,
+      {
+        audioStreamIndex: Number.isFinite(audio) ? audio : undefined,
+        subtitleStreamIndex: Number.isFinite(subtitle) ? subtitle : undefined,
+        mediaSourceId,
+      },
+      Array.isArray(rangeHeader) ? rangeHeader.join(", ") : rangeHeader,
     );
-    res.redirect(playbackUrl);
+
+    // Forward key headers so the <video> element can seek and report progress.
+    const forward = [
+      "content-type",
+      "content-length",
+      "content-range",
+      "accept-ranges",
+      "etag",
+      "last-modified",
+    ];
+    for (const h of forward) {
+      const v = upstream.headers.get(h);
+      if (v) res.setHeader(h, v);
+    }
+
+    // 200 for full file, 206 for partial — preserve the upstream semantics.
+    res.status(upstream.status);
+
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+
+    // Node 18+ exposes Web ReadableStream as `Readable` via Readable.fromWeb.
+    const nodeStream = Readable.fromWeb(
+      upstream.body as unknown as import("node:stream/web").ReadableStream,
+    );
+
+    // Tear down the upstream fetch if the client disconnects (seek past EOF,
+    // tab closed, etc.) so we don't leak Jellyfin connections.
+    const abort = () => {
+      nodeStream.destroy();
+    };
+    req.on("close", abort);
+    res.on("close", abort);
+
+    nodeStream.pipe(res);
   } catch (error) {
     next(error);
   }

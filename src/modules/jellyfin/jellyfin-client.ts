@@ -210,31 +210,6 @@ function createOfflineMediaItem(id: string): MediaCatalogItem {
 function logMediaSummary(label: string, item: JellyfinBaseItem) {
   const cast = item.People?.slice(0, 8).map((person) => ({ name: person.Name ?? "Unknown", role: person.Role ?? undefined, type: person.Type ?? undefined })) ?? [];
   const studioNames = item.Studios?.map((studio) => studio.Name).filter((name): name is string => Boolean(name)) ?? [];
-
-  console.info(
-    `[Jellyfin] ${label}:`,
-    JSON.stringify(
-      {
-        id: item.Id,
-        name: item.Name,
-        type: item.Type,
-        year: item.ProductionYear,
-        genres: item.Genres ?? [],
-        rating: item.OfficialRating ?? "NR",
-        communityRating: item.CommunityRating ?? null,
-        status: item.Status ?? null,
-        seriesName: item.SeriesName ?? null,
-        seasonName: item.SeasonName ?? null,
-        indexNumber: item.IndexNumber ?? null,
-        parentIndexNumber: item.ParentIndexNumber ?? null,
-        mediaSources: item.MediaSources?.length ?? 0,
-        cast,
-        studios: studioNames,
-      },
-      null,
-      2,
-    ),
-  );
 }
 
 function createOfflineImage(kind: "primary" | "backdrop") {
@@ -410,10 +385,7 @@ async function fetchAnimeLibraryIds(): Promise<Set<string>> {
 
   const ids = new Set(
     response.Items.filter((folder) => isAnimeLibraryName(folder.Name)).map((folder) => folder.ItemId),
-  );
-
-  console.info(`[Jellyfin] Anime library ids: ${[...ids].join(", ") || "(none)"}`);
-  return ids;
+  );  return ids;
 }
 
 async function getAnimeLibraryIds(): Promise<Set<string>> {
@@ -492,6 +464,10 @@ function mapItemType(item: JellyfinUserItem, animeLibraryIds: Set<string>): Jell
 
   if (item.Type === "Movie") {
     return isAnime ? "anime" : "movie";
+  }
+
+  if (item.Type === "Photo") {
+    return "photo";
   }
 
   return "movie";
@@ -595,17 +571,33 @@ export async function getJellyfinHealth() {
   }
 }
 
-type JellyfinCollectionType = "all" | "movie" | "series" | "anime";
+type JellyfinCollectionType = "all" | "movie" | "series" | "anime" | "photo";
+
+function includeItemTypesFor(collectionType: JellyfinCollectionType) {
+  if (collectionType === "movie") return "Movie";
+  if (collectionType === "series") return "Series";
+  if (collectionType === "anime") return "Movie,Series";
+  if (collectionType === "photo") return "Photo";
+  return "Movie,Series";
+}
+
+function filterByCollectionType(items: MediaCatalogItem[], collectionType: JellyfinCollectionType) {
+  if (collectionType === "movie") return items.filter((item) => item.type === "movie");
+  if (collectionType === "series") return items.filter((item) => item.type === "series");
+  if (collectionType === "anime") return items.filter((item) => item.type === "anime");
+  if (collectionType === "photo") return items.filter((item) => item.type === "photo");
+  return items;
+}
 
 export async function getJellyfinItems(limit = 20, collectionType: JellyfinCollectionType = "all") {
   try {
     const userId = await getActiveUserId();
-    const includeItemTypes = collectionType === "movie" ? "Movie" : collectionType === "series" ? "Series" : "Movie,Series";
+    const includeItemTypes = includeItemTypesFor(collectionType);
 
     const searchParams = new URLSearchParams({
       userId,
       recursive: "true",
-      includeItemTypes: includeItemTypes,
+      includeItemTypes,
       sortBy: "DateCreated",
       sortOrder: "Descending",
       limit: String(limit),
@@ -621,35 +613,11 @@ export async function getJellyfinItems(limit = 20, collectionType: JellyfinColle
 
     const items = response.Items.map((item) => mapToCatalogItem(item, mapItemType(item, animeLibraryIds)));
 
-    console.info(
-      `[Jellyfin] Items (${collectionType}, ${items.length}/${response.TotalRecordCount ?? items.length}):`,
-      items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        type: item.type,
-        year: item.year,
-        genres: item.genres,
-        mediaSources: item.mediaSourceCount ?? 0,
-        progress: item.progress ?? null,
-        status: item.status ?? null,
-      })),
-    );
-
-    if (collectionType === "movie") {
-      // "movie" tab includes both regular movies AND anime movies.
-      return items.filter((item) => item.type === "movie");
-    }
-
-    if (collectionType === "series") {
-      // "series" tab includes both regular series AND anime series.
-      return items.filter((item) => item.type === "series");
-    }
-
     if (collectionType === "anime") {
       return items.filter((item) => item.type === "anime");
     }
 
-    return items;
+    return filterByCollectionType(items, collectionType);
   } catch {
     return [createOfflineMediaItem("jellyfin-offline")];
   }
@@ -767,18 +735,6 @@ export async function getJellyfinSeriesEpisodes(seriesId: string) {
     playbackUrl: `/api/jellyfin/play/${encodeURIComponent(episode.Id)}`,
   }));
 
-  console.info(
-    `[Jellyfin] Episodes for series ${seriesId} (${episodes.length}):`,
-    episodes.map((episode) => ({
-      id: episode.id,
-      title: episode.title,
-      seasonName: episode.seasonName ?? null,
-      indexNumber: episode.indexNumber ?? null,
-      parentIndexNumber: episode.parentIndexNumber ?? null,
-      progress: episode.progress ?? null,
-    })),
-  );
-
   return episodes;
 }
 
@@ -806,6 +762,47 @@ export function buildJellyfinPlaybackUrl(
     url.searchParams.set("SubtitleStreamIndex", String(options.subtitleStreamIndex));
   }
   return url.toString();
+}
+
+/**
+ * Fetch the Jellyfin stream URL without consuming the body and without a
+ * short timeout. Used by the /play proxy to pipe bytes back to the browser
+ * with proper Range support.
+ *
+ * Reuses the same MediaBrowser auth header as the rest of the backend so
+ * the API key is no longer embedded in the URL the browser sees.
+ *
+ * Intentionally bypasses fetchWithTimeout — video streams run for minutes
+ * and would be killed by the 2s default.
+ */
+export async function fetchJellyfinStream(
+  playbackItemId: string,
+  options: { audioStreamIndex?: number; subtitleStreamIndex?: number; mediaSourceId?: string } = {},
+  rangeHeader?: string,
+): Promise<Response> {
+  const url = new URL(`/Videos/${encodeURIComponent(playbackItemId)}/stream.mp4`, env.jellyfinUrl);
+  url.searchParams.set("static", "true");
+  // `MediaSourceId` is required by Jellyfin when `AudioStreamIndex` /
+  // `SubtitleStreamIndex` are passed — otherwise the server silently ignores
+  // the track selection and serves the default audio.
+  if (options.mediaSourceId) {
+    url.searchParams.set("MediaSourceId", options.mediaSourceId);
+  }
+  if (typeof options.audioStreamIndex === "number") {
+    url.searchParams.set("AudioStreamIndex", String(options.audioStreamIndex));
+  }
+  if (typeof options.subtitleStreamIndex === "number") {
+    url.searchParams.set("SubtitleStreamIndex", String(options.subtitleStreamIndex));
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: buildAuthorizationHeader(),
+  };
+  if (rangeHeader) {
+    headers["Range"] = rangeHeader;
+  }
+
+  return fetch(url.toString(), { headers });
 }
 
 
