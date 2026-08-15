@@ -6,7 +6,6 @@ services:
     container_name: jellyfin
     restart: unless-stopped
 
-    # Jellyfin web UI
     ports:
       - "8096:8096"
 
@@ -14,22 +13,32 @@ services:
       - TZ=Asia/Dhaka
 
     volumes:
-      # Jellyfin app data
       - jellyfin_config:/config
       - jellyfin_cache:/cache
 
-      # Media libraries (Windows host paths)
       - E:/Movies:/media/movies:ro
       - E:/tv-shows:/media/tv-shows:ro
       - E:/anime:/media/anime:ro
+      - E:/photos:/media/photos:ro
 
-    # Optional: improves transcoding permissions on some hosts
-    # user: "1000:1000"
+  caddy:
+    image: caddy:2
+    container_name: moviedock-caddy
+    restart: unless-stopped
 
-    # Optional hardware acceleration (uncomment if needed)
-    # devices:
-    #   - /dev/dri:/dev/dri
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   jellyfin_config:
   jellyfin_cache:
+  caddy_data:
+  caddy_config:
